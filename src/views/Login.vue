@@ -29,7 +29,7 @@
             required 
             @input="clearError" 
           />         
-           <label for="password">密码</label>
+          <label for="password">密码</label>
         </div>
 
         <!-- 错误提示 -->
@@ -40,19 +40,65 @@
           登录
         </button>
 
-        <!-- 注册链接 -->
+        <!-- 注册和忘记密码链接 -->
         <div class="form-footer">
           <span>还没有账号？</span>
-          <a href="/register">立即注册</a>
+          <router-link to="/register">立即注册</router-link>
+          <a href="#" @click.prevent="showPasswordModal = true" class="forgot-password">忘记密码？</a>
         </div>
       </form>
+    </div>
+
+    <!-- 密码修改模态框 -->
+    <div v-if="showPasswordModal" class="modal-overlay">
+      <div class="modal-container">
+        <h3>修改密码</h3>
+        <form @submit.prevent="handleChangePassword">
+          <div class="input-group">
+            <input
+              v-model.trim="passwordForm.oldPassword"
+              type="password"
+              placeholder="当前密码"
+              required
+            />
+          </div>
+          <div class="input-group">
+            <input
+              v-model.trim="passwordForm.newPassword"
+              type="password"
+              placeholder="新密码"
+              required
+            />
+          </div>
+          <div class="input-group">
+            <input
+              v-model.trim="passwordForm.confirmPassword"
+              type="password"
+              placeholder="确认新密码"
+              required
+            />
+          </div>
+          <div class="error-message" v-if="passwordError">{{ passwordError }}</div>
+          <div class="button-group">
+            <button type="submit" class="confirm-btn">
+              确认修改
+            </button>
+            <button type="button" class="cancel-btn" @click="showPasswordModal = false">
+              取消
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+// 引入MD5加密库
+import md5 from 'blueimp-md5'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 
 const router = useRouter()
 
@@ -62,65 +108,80 @@ const loginForm = reactive({
   password: ''
 })
 
+// 密码修改表单
+const passwordForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
 const errorMsg = ref('')
-// NEW: 清除错误信息
+const passwordError = ref('')
+const showPasswordModal = ref(false)
+
+// 清除错误信息
 const clearError = () => {
   errorMsg.value = ''
 }
-// const isFormValid = ref(false)
-
-// // 输入验证
-// const validateInput = () => {
-//   isFormValid.value = loginForm.username && loginForm.password
-// }
 
 // 登录处理
 const handleLogin = async () => {
-    // NEW: 先校验输入是否为空
+  // 先校验输入是否为空
   if (!loginForm.username || !loginForm.password) {
     errorMsg.value = '请输入用户名和密码'
-    return // 直接返回，不继续执行
+    return
   }
+
   try {
-    // 模拟一个简单的用户验证
-    const mockUsers = [
-      { username: 'user1', password: 'password123' },
-      { username: 'user2', password: 'password456' }
-    ]
+    const res = await axios.post('/user/login', {
+      name: loginForm.username,
+      password: md5(loginForm.password) // 密码加密传输
+    })
 
-    const user = mockUsers.find(user => user.username === loginForm.username)
-    
-    if (!user) {
-      errorMessage('用户名不存在')
-      return
-    }
-
-    // 验证密码
-    if (user.password === loginForm.password) {
-      // NEW: 登录成功提示
-      errorMsg.value = '登录成功！正在跳转...'
-      
-      // 模拟延迟跳转
-      setTimeout(() => {
-        router.push('/home')
-      }, 1500)
+    if (res.data.code === 0) {
+      // 存储token
+      localStorage.setItem('token', res.data.data)
+      // 跳转到首页
+      router.push('/home')
     } else {
-      errorMsg.value = '密码错误'
+      errorMsg.value = res.data.msg
     }
   } catch (error) {
     errorMsg.value = '登录失败，请稍后重试'
+    console.error('登录错误:', error)
   }
 }
 
-// 错误提示
-const errorMessage = (text) => {
-  errorMsg.value = text
-  setTimeout(() => {
-    errorMsg.value = ''
-  }, 3000)
+// 修改密码处理
+const handleChangePassword = async () => {
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    passwordError.value = '两次输入的新密码不一致'
+    return
+  }
+
+  try {
+    const res = await axios.patch('/user/updatePwd', {
+      old_pwd: md5(passwordForm.oldPassword),
+      new_pwd: md5(passwordForm.newPassword),
+      re_ped: md5(passwordForm.confirmPassword)
+    }, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+
+    if (res.data.code === 0) {
+      alert('密码修改成功，请重新登录')
+      localStorage.removeItem('token')
+      router.push('/login')
+    } else {
+      passwordError.value = res.data.msg
+    }
+  } catch (error) {
+    passwordError.value = '修改失败，请检查旧密码是否正确'
+    console.error('修改密码错误:', error)
+  }
 }
-
-
 </script>
 
 <style scoped>
@@ -160,50 +221,70 @@ const errorMessage = (text) => {
   z-index: -1;                /* 确保背景位于最底层 */
 }
 
-
 /* 头部样式 */
 .form-header {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 30px;
+}
+
+.form-header h2 {
+  color: #2c3e50;
+  margin-bottom: 8px;
+}
+
+.form-header p {
+  color: #7f8c8d;
+  font-size: 14px;
 }
 
 /* 输入框样式 */
 .input-group {
-  margin-bottom: 20px;
   position: relative;
+  margin-bottom: 20px;
 }
 
 .input-group input {
   width: 100%;
-  padding: 12px;
-  border: 2px solid #e0e0e0;
+  padding: 14px 16px;
+  border: 1px solid #e0e0e0;
   border-radius: 8px;
-  font-size: 16px;
-  margin-top: 5px;
-  background-color: transparent;
+  font-size: 15px;
+  transition: border 0.3s;
 }
 
-/* 输入框内文字浮动效果 */
+.input-group input:focus {
+  border-color: #3498db;
+  outline: none;
+}
+
 .input-group label {
   position: absolute;
-  top: 50%;
-  left: 12px;
-  transform: translateY(-50%);
+  left: 16px;
+  top: 14px;
   color: #95a5a6;
-  font-size: 14px;
+  font-size: 15px;
+  transition: all 0.3s;
   pointer-events: none;
-  transition: 0.3s ease all;
+  background: white;
+  padding: 0 5px;
 }
 
-/* 输入框有值时，label上浮 */
 .input-group input:focus + label,
-.input-group input:valid + label {
-  top: -5px;
+.input-group input:not(:placeholder-shown) + label {
+  top: -10px;
   font-size: 12px;
   color: #3498db;
 }
 
-/* 提交按钮 */
+/* 错误消息样式 */
+.error-message {
+  color: #f56c6c;
+  text-align: center;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+/* 按钮样式 */
 .submit-btn {
   width: 100%;
   padding: 12px;
@@ -212,23 +293,100 @@ const errorMessage = (text) => {
   border: none;
   border-radius: 8px;
   font-size: 16px;
+  font-weight: 500;
   cursor: pointer;
-}
-
-.submit-btn:disabled {
-  background: #95a5a6;
-}
-
-/* 错误消息样式 */
-.error-message {
-  color: #f56c6c;
-  text-align: center;
+  transition: background 0.3s;
   margin-top: 10px;
 }
 
-/* 底部注册链接 */
+.submit-btn:hover {
+  background: #2980b9;
+}
+
+/* 底部链接样式 */
 .form-footer {
   text-align: center;
   margin-top: 20px;
+  color: #7f8c8d;
+  font-size: 14px;
+}
+
+.form-footer a {
+  color: #3498db;
+  text-decoration: none;
+  margin: 0 5px;
+}
+
+.form-footer a:hover {
+  text-decoration: underline;
+}
+
+.forgot-password {
+  display: block;
+  margin-top: 10px;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-container {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+}
+
+.modal-container h3 {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #2c3e50;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.confirm-btn {
+  flex: 1;
+  padding: 12px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.cancel-btn {
+  flex: 1;
+  padding: 12px;
+  background: #f5f5f5;
+  color: #333;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.confirm-btn:hover {
+  background: #2980b9;
+}
+
+.cancel-btn:hover {
+  background: #e0e0e0;
 }
 </style>

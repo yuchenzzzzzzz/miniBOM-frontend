@@ -2,7 +2,7 @@
 import axios from 'axios'
 
 const service = axios.create({
-  baseURL: 'https://your-company.idme.huawei.com/idme/miniBOM_prod',
+  baseURL: 'http://localhost:8080',
   timeout: 5000
 })
 
