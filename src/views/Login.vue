@@ -206,7 +206,7 @@ const handleChangePassword = async () => {
   background: white;
   border-radius: 20px;
   padding: 60px 80px;    /* 上下内边距，左右为适应屏幕 */
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 30px #0000001a;
   position: relative;
 }
 
