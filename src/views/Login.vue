@@ -94,11 +94,9 @@
 </template>
 
 <script setup>
-// 引入MD5加密库
-import md5 from 'blueimp-md5'
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { loginApi, updatePwdApi } from '@/api/user'
 
 const router = useRouter()
 
@@ -108,7 +106,6 @@ const loginForm = reactive({
   password: ''
 })
 
-// 密码修改表单
 const passwordForm = reactive({
   oldPassword: '',
   newPassword: '',
@@ -119,32 +116,27 @@ const errorMsg = ref('')
 const passwordError = ref('')
 const showPasswordModal = ref(false)
 
-// 清除错误信息
 const clearError = () => {
   errorMsg.value = ''
 }
 
-// 登录处理
+// 登录处理函数
 const handleLogin = async () => {
-  // 先校验输入是否为空
   if (!loginForm.username || !loginForm.password) {
     errorMsg.value = '请输入用户名和密码'
     return
   }
 
   try {
-    const res = await axios.post('/user/login', {
-      name: loginForm.username,
-      password: md5(loginForm.password) // 密码加密传输
-    })
+    const res = await loginApi(loginForm)
 
     if (res.data.code === 0) {
-      // 存储token
-      localStorage.setItem('token', res.data.data)
-      // 跳转到首页
+      const token = res.data.data
+      localStorage.setItem('token', token)
+      axios.defaults.headers.common['Authorization'] = token
       router.push('/home')
     } else {
-      errorMsg.value = res.data.msg
+      errorMsg.value = res.data.result || '登录失败'
     }
   } catch (error) {
     errorMsg.value = '登录失败，请稍后重试'
@@ -152,7 +144,7 @@ const handleLogin = async () => {
   }
 }
 
-// 修改密码处理
+// 修改密码函数
 const handleChangePassword = async () => {
   if (passwordForm.newPassword !== passwordForm.confirmPassword) {
     passwordError.value = '两次输入的新密码不一致'
@@ -160,22 +152,14 @@ const handleChangePassword = async () => {
   }
 
   try {
-    const res = await axios.patch('/user/updatePwd', {
-      old_pwd: md5(passwordForm.oldPassword),
-      new_pwd: md5(passwordForm.newPassword),
-      re_ped: md5(passwordForm.confirmPassword)
-    }, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
-    })
+    const res = await updatePwdApi(passwordForm)
 
     if (res.data.code === 0) {
       alert('密码修改成功，请重新登录')
       localStorage.removeItem('token')
       router.push('/login')
     } else {
-      passwordError.value = res.data.msg
+      passwordError.value = res.data.result || '修改失败'
     }
   } catch (error) {
     passwordError.value = '修改失败，请检查旧密码是否正确'
@@ -183,6 +167,7 @@ const handleChangePassword = async () => {
   }
 }
 </script>
+
 
 <style scoped>
 /* 背景和容器设置 */

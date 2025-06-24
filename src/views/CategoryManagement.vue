@@ -39,6 +39,7 @@
               <th>状态</th>
               <th>是否实例化</th>
               <th>父分类</th>
+              <th>关联属性</th> <!-- 新增列 -->
               <th>操作</th>
             </tr>
           </thead>
@@ -50,6 +51,9 @@
               <td>{{ category.status }}</td>
               <td>{{ category.instantiated }}</td>
               <td>{{ getCategoryNameByCode(category.parent) }}</td>
+              <td>
+                {{ getAttributeNamesByCodes(category.attributes) }}
+              </td>
               <td>
                 <button @click="openEditDialog(category)">编辑</button>
                 <button @click="deleteCategory(category.code)">删除</button>
@@ -97,6 +101,21 @@
                 {{ c.name }}
               </option>
             </select>
+
+            <!-- 关联属性多选框 -->
+            <div class="attributes-checkbox-group">
+              <label>关联属性：</label>
+              <div v-for="attr in attributes" :key="attr.code" class="checkbox-item">
+                <input
+                  type="checkbox"
+                  :value="attr.code"
+                  v-model="formData.attributes"
+                  :id="'attr-' + attr.code"
+                />
+                <label :for="'attr-' + attr.code">{{ attr.name }}</label>
+              </div>
+            </div>
+
             <div class="button-group">
               <button type="submit">{{ isEditing ? '保存修改' : '添加' }}</button>
               <button type="button" @click="closeDialog">取消</button>
@@ -109,16 +128,18 @@
 </template>
 
 <script setup>
-import { ref, computed, defineComponent, h } from 'vue'
+import { ref, computed, defineComponent, h, onMounted } from 'vue'
+import { getCategoryList, createCategory, updateCategory, deleteCategory } from '@/api/category'
+// import { getAttributeList } from '@/api/attribute' // 也需要封装属性接口
 
 const searchKeyword = ref('')
 const showDialog = ref(false)
 const isEditing = ref(false)
 const showTree = ref(false)
-const categories = ref([
-  { code: '001', name: '齿轮', description: '用于传动', status: '有效', parent: '', instantiated: '是' },
-  { code: '002', name: '电机', description: '动力来源', status: '无效', parent: '', instantiated: '否' },
-])
+
+const categories = ref([])
+const attributes = ref([])
+const filteredCategories = ref([])
 
 const formData = ref({
   code: '',
@@ -126,20 +147,61 @@ const formData = ref({
   description: '',
   status: '有效',
   parent: '',
-  instantiated: '是'
+  instantiated: '是',
+  attributes: []
 })
 
-const filteredCategories = ref([...categories.value])
+const fetchCategories = async () => {
+  try {
+    const res = await getCategoryList()
+    if (res.data.code === 0) {
+      categories.value = res.data.data || []
+      filteredCategories.value = [...categories.value]
+    } else {
+      alert('加载分类失败：' + res.data.result)
+    }
+  } catch (error) {
+    alert('加载分类失败，请检查网络')
+    console.error(error)
+  }
+}
+
+const fetchAttributes = async () => {
+  try {
+    const res = await getAttributeList()
+    if (res.data.code === 0) {
+      attributes.value = res.data.data || []
+    } else {
+      alert('加载属性失败：' + res.data.result)
+    }
+  } catch (error) {
+    alert('加载属性失败，请检查网络')
+    console.error(error)
+  }
+}
+
+onMounted(async () => {
+  await fetchCategories()
+  await fetchAttributes()
+})
 
 const openAddDialog = () => {
   isEditing.value = false
-  formData.value = { code: '', name: '', description: '', status: '有效', parent: '', instantiated: '是' }
+  formData.value = {
+    code: '',
+    name: '',
+    description: '',
+    status: '有效',
+    parent: '',
+    instantiated: '是',
+    attributes: []
+  }
   showDialog.value = true
 }
 
 const openEditDialog = (category) => {
   isEditing.value = true
-  formData.value = { ...category }
+  formData.value = { ...category, attributes: [...(category.attributes || [])] }
   showDialog.value = true
 }
 
@@ -147,31 +209,57 @@ const closeDialog = () => {
   showDialog.value = false
 }
 
-const submitCategory = () => {
+const submitCategory = async () => {
   if (!formData.value.code.trim() || !formData.value.name.trim()) {
     alert('编码和名称不能为空')
     return
   }
-  if (isEditing.value) {
-    const index = categories.value.findIndex(c => c.code === formData.value.code)
-    if (index !== -1) {
-      categories.value[index] = { ...formData.value }
+
+  try {
+    if (isEditing.value) {
+      const res = await updateCategory(formData.value)
+      if (res.data.code === 0) {
+        await fetchCategories()
+        closeDialog()
+      } else {
+        alert('修改失败：' + res.data.result)
+      }
+    } else {
+      if (categories.value.some(c => c.code === formData.value.code)) {
+        alert('编码重复')
+        return
+      }
+      const res = await createCategory(formData.value)
+      if (res.data.code === 0) {
+        await fetchCategories()
+        closeDialog()
+      } else {
+        alert('新增失败：' + res.data.result)
+      }
     }
-  } else {
-    const exists = categories.value.some(c => c.code === formData.value.code)
-    if (exists) {
-      alert('编码重复')
-      return
-    }
-    categories.value.push({ ...formData.value })
+  } catch (error) {
+    alert('操作失败，请检查网络')
+    console.error(error)
   }
-  filteredCategories.value = [...categories.value]
-  closeDialog()
 }
 
-const deleteCategory = (code) => {
-  categories.value = categories.value.filter(c => c.code !== code)
-  filteredCategories.value = filteredCategories.value.filter(c => c.code !== code)
+const handleDelete = async (code) => {
+  if (!confirm('确认删除该分类吗？')) return
+
+  try {
+    const res = await deleteCategory(code)
+    if (res.data.code === 0) {
+      await fetchCategories()
+      if (formData.value.code === code) {
+        closeDialog()
+      }
+    } else {
+      alert('删除失败：' + res.data.result)
+    }
+  } catch (error) {
+    alert('删除失败，请检查网络')
+    console.error(error)
+  }
 }
 
 const handleSearch = () => {
@@ -190,9 +278,15 @@ const getCategoryNameByCode = (code) => {
   return match ? match.name : ''
 }
 
-const rootCategories = computed(() =>
-  categories.value.filter(c => !c.parent)
-)
+const getAttributeNamesByCodes = (codes) => {
+  if (!codes || codes.length === 0) return ''
+  return attributes.value
+    .filter(attr => codes.includes(attr.code))
+    .map(attr => attr.name)
+    .join(', ')
+}
+
+const rootCategories = computed(() => categories.value.filter(c => !c.parent))
 
 const getChildren = (parentCode) =>
   categories.value.filter(c => c.parent === parentCode)
@@ -207,19 +301,21 @@ const TreeNode = defineComponent({
     getChildren: Function
   },
   setup(props) {
-    return () => h('li', [
-      props.category.name,
-      props.getChildren(props.category.code).length > 0 &&
-        h('ul',
-          props.getChildren(props.category.code).map(child =>
-            h(TreeNode, {
-              category: child,
-              getChildren: props.getChildren,
-              key: child.code
-            })
+    return () =>
+      h('li', [
+        props.category.name,
+        props.getChildren(props.category.code).length > 0 &&
+          h(
+            'ul',
+            props.getChildren(props.category.code).map((child) =>
+              h(TreeNode, {
+                category: child,
+                getChildren: props.getChildren,
+                key: child.code
+              })
+            )
           )
-        )
-    ])
+      ])
   }
 })
 </script>
@@ -434,4 +530,27 @@ const TreeNode = defineComponent({
   margin: 4px 0;
 }
 
+.attributes-checkbox-group {
+  margin: 15px 0;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px; /* 行间距、列间距 */
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;   /* 不压缩 */
+  white-space: nowrap;  /* 防止文字换行 */
+  font-size: 14px;
+}
+
+
+
+.checkbox-item input[type="checkbox"] {
+  cursor: pointer;
+}
 </style>

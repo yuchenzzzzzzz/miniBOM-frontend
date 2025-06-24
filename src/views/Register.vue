@@ -10,7 +10,7 @@
         <!-- 用户名 -->
         <div class="input-group">
           <input
-            v-model.trim="form.name"
+            v-model.trim="form.username"
             type="text"
             placeholder=" "
             required
@@ -61,49 +61,53 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
-import md5 from 'blueimp-md5'
+import { registerApi } from '@/api/user'  
 
 const router = useRouter()
+
 const form = reactive({
-  name: '',
+  username: '',
   password: '',
-  email: ''
+  email: '',
+  phoneNumber: ''
 })
+
 const usernameValid = ref(null)
 const passwordValid = ref(null)
 const errorMsg = ref('')
 
+// 表单整体校验
 const formValid = computed(() => {
   return usernameValid.value && passwordValid.value
 })
 
+// 用户名校验：2~20位字母数字
 const validateUsername = () => {
-  usernameValid.value = /^[a-zA-Z0-9]{2,20}$/.test(form.name)
+  usernameValid.value = /^[a-zA-Z0-9]{2,20}$/.test(form.username)
 }
 
+// 密码校验：6~20位，含字母数字特殊字符
 const validatePassword = () => {
   passwordValid.value = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{6,20}$/.test(form.password)
 }
 
+// 注册提交
 const handleRegister = async () => {
   try {
-    const res = await axios.post('/user/register', {
-      ...form,
-      password: md5(form.password)
-    })
-    
+    const res = await registerApi(form)
     if (res.data.code === 0) {
       alert('注册成功！')
       router.push('/login')
     } else {
-      errorMsg.value = res.data.msg
+      errorMsg.value = res.data.result || '注册失败'
     }
   } catch (error) {
     errorMsg.value = '注册失败，请稍后重试'
+    console.error('注册错误:', error)
   }
 }
 </script>
+
 
 <style scoped>
 /* 复用登录页的样式，只需新增提示样式 */
