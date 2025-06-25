@@ -59,7 +59,7 @@
             <tbody>
               <tr 
                 v-for="(part, index) in partList" 
-                :key="index" 
+                :key="part.code" 
                 class="table-row"
                 :class="{ 'hover-row': hoveredIndex === index }"
                 @mouseenter="hoverRow(index)"
@@ -266,56 +266,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-
-// 模拟请求
-const mockRequest = {
-  // 获取 Part 列表
-  getPartList: (params) => new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        code: 200,
-        data: [
-          { code: '411910001', name: '华为Mate60', unit: '台', version: 'A1', status: 'V1', mode: '装配', source: '自研', category: '手机' },
-          { code: '411910002', name: '小米14', unit: '台', version: 'B2', status: 'V2', mode: '组装', source: '自研', category: '手机' },
-          { code: '411910003', name: '苹果iPhone15', unit: '台', version: 'C3', status: 'V3', mode: '组装', source: '进口', category: '手机' },
-          { code: '411910004', name: '三星GalaxyS24', unit: '台', version: 'D4', status: 'V4', mode: '装配', source: '进口', category: '手机' },
-          { code: '411910005', name: 'OPPOFindX7', unit: '台', version: 'E5', status: 'V5', mode: '组装', source: '自研', category: '手机' },
-          { code: '411910006', name: 'VivoX100', unit: '台', version: 'F6', status: 'V6', mode: '装配', source: '自研', category: '手机' },
-          { code: '411910007', name: '一加12', unit: '台', version: 'G7', status: 'V7', mode: '组装', source: '自研', category: '手机' },
-          { code: '411910008', name: '荣耀Magic6', unit: '台', version: 'H8', status: 'V8', mode: '装配', source: '自研', category: '手机' },
-        ]
-      });
-    }, 500); // 模拟网络延迟
-  }),
-  
-  // 保存/编辑 Part
-  savePart: (data) => new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ code: 200, msg: '操作成功' });
-    }, 500);
-  }),
-  
-  // 删除 Part
-  deletePart: (code) => new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ code: 200, msg: '删除成功' });
-    }, 500);
-  }),
-  
-  // 查询历史版本
-  getPartHistory: (partCode) => new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        code: 200,
-        data: [
-          { version: 'A1', createTime: '2025-06-01', operator: 'admin' },
-          { version: 'A2', createTime: '2025-06-15', operator: 'user01' },
-          { version: 'A3', createTime: '2025-06-30', operator: 'admin' }
-        ]
-      });
-    }, 500);
-  })
-}
+import { createPart, getPartList, getPartDetail, updatePart, deletePart } from '@/api/part'; // 导入 API 方法
 
 // 响应式数据
 const partList = ref([]);
@@ -345,7 +296,7 @@ const message = ref({
 // 获取 Part 列表
 const fetchPartList = async () => {
   try {
-    const res = await mockRequest.getPartList({ keyword: searchKey.value });
+    const res = await getPartList({ keyword: searchKey.value });
     if (res.code === 200) {
       partList.value = res.data;
     }
@@ -371,15 +322,22 @@ const handleCreate = () => {
 };
 
 // 编辑：回显数据到弹窗
-const handleEdit = (part) => {
+const handleEdit = async (part) => {
   dialogVisible.value = true;
-  form.value = { 
-    ...part, 
-    attrs: { 
-      length: part.length || '', 
-      width: part.width || '' 
-    } 
-  };
+  try {
+    const res = await getPartDetail(part.id); // 假设使用 id 获取详情
+    if (res.code === 200) {
+      form.value = { 
+        ...res.data, 
+        attrs: { 
+          length: res.data.length || '', 
+          width: res.data.width || '' 
+        } 
+      };
+    }
+  } catch (err) {
+    showMessage('获取详情失败，请重试', 'error');
+  }
 };
 
 // 保存：新增/编辑逻辑
@@ -390,7 +348,12 @@ const handleSave = async () => {
   }
   
   try {
-    const res = await mockRequest.savePart(form.value);
+    let res;
+    if (form.value.id) { // 如果有 id 则为更新操作
+      res = await updatePart(form.value);
+    } else { // 没有 id 则为新增操作
+      res = await createPart(form.value);
+    }
     if (res.code === 200) {
       showMessage('保存成功', 'success');
       dialogVisible.value = false;
@@ -408,7 +371,7 @@ const handleDelete = async (part) => {
   }
   
   try {
-    const res = await mockRequest.deletePart(part.code);
+    const res = await deletePart(part.id); // 假设使用 id 删除
     if (res.code === 200) {
       showMessage('删除成功', 'success');
       fetchPartList(); // 刷新列表
@@ -418,14 +381,15 @@ const handleDelete = async (part) => {
   }
 };
 
-// 查询历史版本
+// 查询历史版本（这里没有对应的 API 方法，暂时保留模拟逻辑）
 const handleViewHistory = async (part) => {
   historyDialogVisible.value = true;
   try {
-    const res = await mockRequest.getPartHistory(part.code);
-    if (res.code === 200) {
-      historyList.value = res.data;
-    }
+    // 这里需要添加查询历史版本的 API 方法
+    // const res = await getPartHistory(part.code);
+    // if (res.code === 200) {
+    //   historyList.value = res.data;
+    // }
   } catch (err) {
     showMessage('获取历史版本失败，请重试', 'error');
   }
@@ -495,13 +459,19 @@ onMounted(() => {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+/* 确保页面可以滚动 */
+html, body {
+  height: 100%;
+  overflow-y: auto;
+}
+
 .part-container {
   position: relative;
   min-height: 100vh;
   width: 100%;
   display: flex;
   justify-content: center;
-  padding: 40px 20px;
+  padding: 20px;
   transition: background-color 0.3s ease;
 }
 
@@ -525,13 +495,14 @@ body.dark-mode .bg-decoration {
 .content-wrapper {
   position: relative;
   z-index: 1;
-  width: 90%;
-  max-width: 1400px;
-  padding: 60px 40px;
+  width: 100%;
+  max-width: 1920px;
+  padding: 40px;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
   animation: fadeInUp 0.6s ease-out forwards;
+  margin: 20px 0; /* 添加上下边距 */
 }
 
 body.dark-mode .content-wrapper {
@@ -541,14 +512,14 @@ body.dark-mode .content-wrapper {
 /* 页面标题区 */
 .page-header {
   text-align: center;
-  margin-bottom: 60px;
+  margin-bottom: 40px;
 }
 
 .page-title {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 600;
   color: #1e3a8a;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
   text-align: center;
   text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
 }
@@ -561,13 +532,13 @@ body.dark-mode .page-title {
 .header-actions {
   display: flex;
   justify-content: center;
-  gap: 20px;
-  margin-top: 10px;
+  gap: 15px;
+  margin-top: 5px;
 }
 
 .action-button {
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   justify-content: center;
@@ -593,14 +564,13 @@ body.dark-mode .action-button {
 
 /* 搜索栏 */
 .search-section {
-  margin-bottom: 40px;
+  margin-bottom: 30px;
   text-align: center;
 }
 
 .search-container {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  max-width: 1000px;
   width: 100%;
   background: rgba(255, 255, 255, 0.8);
   border-radius: 8px;
@@ -616,9 +586,9 @@ body.dark-mode .search-container {
 
 .search-input {
   flex: 1;
-  padding: 14px 20px;
+  padding: 12px 15px;
   border: none;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #1e293b;
   background: transparent;
   outline: none;
@@ -633,17 +603,19 @@ body.dark-mode .search-input {
 }
 
 .search-button, .create-button {
-  padding: 14px 24px;
+  padding: 12px 18px;
   background: #3b82f6;
   color: white;
   border: none;
   cursor: pointer;
   transition: background-color 0.3s ease;
   font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .create-button {
   background: #10b981;
+  margin-left: 10px;
 }
 
 .search-button:hover {
@@ -661,7 +633,7 @@ body.dark-mode .search-input {
   overflow: hidden;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
-  padding: 30px;
+  padding: 25px;
 }
 
 body.dark-mode .list-card {
@@ -675,8 +647,8 @@ body.dark-mode .list-card {
 
 .card-header {
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  padding-bottom: 20px;
-  margin-bottom: 30px;
+  padding-bottom: 15px;
+  margin-bottom: 25px;
   text-align: center;
 }
 
@@ -685,7 +657,7 @@ body.dark-mode .card-header {
 }
 
 .card-title {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: #1e3a8a;
 }
@@ -695,9 +667,9 @@ body.dark-mode .card-title {
 }
 
 .card-meta {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: #64748b;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 body.dark-mode .card-meta {
@@ -705,20 +677,28 @@ body.dark-mode .card-meta {
 }
 
 /* 表格样式 */
+.table-container {
+  width: 100%;
+  overflow-x: auto; /* 水平滚动 */
+}
+
 .attribute-table {
   width: 100%;
   border-collapse: collapse;
   border-spacing: 0;
-  table-layout: fixed;
+  table-layout: auto;
+  min-width: 800px; /* 设置最小宽度，确保在小屏幕上能正常显示 */
 }
 
 .attribute-table th,
 .attribute-table td {
-  padding: 16px 12px;
+  padding: 12px 10px;
   text-align: left;
   vertical-align: middle;
   transition: background-color 0.2s ease;
   border: none;
+  font-size: 0.9rem;
+  white-space: nowrap; /* 防止文本换行 */
 }
 
 /* 表头样式 */
@@ -771,13 +751,13 @@ body.dark-mode .hover-row {
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-start;
 }
 
 .action-button {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   display: flex;
   justify-content: center;
@@ -785,6 +765,7 @@ body.dark-mode .hover-row {
   border: none;
   cursor: pointer;
   transition: all 0.3s ease;
+  font-size: 0.8rem;
 }
 
 .edit {
@@ -853,7 +834,7 @@ body.dark-mode .hover-row {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  width: 90%;
+  width: 95%;
   max-width: 800px;
   overflow: hidden;
   transform: scale(0.95);
@@ -873,7 +854,7 @@ body.dark-mode .dialog-content {
 }
 
 .dialog-header {
-  padding: 20px 30px;
+  padding: 15px 25px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: space-between;
@@ -885,7 +866,7 @@ body.dark-mode .dialog-header {
 }
 
 .dialog-title {
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   font-weight: 600;
   color: #1e3a8a;
 }
@@ -898,7 +879,7 @@ body.dark-mode .dialog-title {
   background: none;
   border: none;
   color: #64748b;
-  font-size: 1.2rem;
+  font-size: 1rem;
   cursor: pointer;
   transition: color 0.2s ease;
 }
@@ -916,17 +897,17 @@ body.dark-mode .dialog-close:hover {
 }
 
 .dialog-body {
-  padding: 30px;
+  padding: 25px;
   max-height: 70vh;
   overflow-y: auto;
 }
 
 .dialog-footer {
-  padding: 20px 30px;
+  padding: 15px 25px;
   border-top: 1px solid rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: flex-end;
-  gap: 15px;
+  gap: 12px;
 }
 
 body.dark-mode .dialog-footer {
@@ -934,12 +915,13 @@ body.dark-mode .dialog-footer {
 }
 
 .dialog-button {
-  padding: 10px 20px;
+  padding: 8px 16px;
   border: none;
   border-radius: 6px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
+  font-size: 0.9rem;
 }
 
 .cancel {
@@ -972,9 +954,9 @@ body.dark-mode .cancel:hover {
 /* 表单样式 */
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 25px;
-  margin-bottom: 25px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
 .form-group {
@@ -983,9 +965,9 @@ body.dark-mode .cancel:hover {
 
 .form-label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #475569;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 500;
 }
 
@@ -1000,12 +982,12 @@ body.dark-mode .form-label {
 
 .form-input {
   width: 100%;
-  padding: 12px 15px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   color: #1e293b;
-  font-size: 1rem;
+  font-size: 0.9rem;
   transition: all 0.3s ease;
   outline: none;
 }
@@ -1030,10 +1012,11 @@ body.dark-mode .form-input {
 
 .history-table th,
 .history-table td {
-  padding: 12px 10px;
+  padding: 10px 8px;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 0.9rem;
 }
 
 body.dark-mode .history-table th,
@@ -1066,7 +1049,7 @@ body.dark-mode .history-table td {
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 12px 24px;
+  padding: 10px 20px;
   border-radius: 8px;
   color: white;
   font-weight: 500;
@@ -1076,6 +1059,7 @@ body.dark-mode .history-table td {
   transition: opacity 0.3s ease;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   animation: fadeIn 0.3s ease forwards;
+  font-size: 0.9rem;
 }
 
 .message-success {
@@ -1113,6 +1097,64 @@ body.dark-mode .history-table td {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .content-wrapper {
+    padding: 30px;
+  }
+  
+  .attribute-table th,
+  .attribute-table td {
+    padding: 10px 8px;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 992px) {
+  .content-wrapper {
+    padding: 25px;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .search-container {
+    flex-direction: column;
+  }
+  
+  .create-button {
+    margin-left: 0;
+    margin-top: 10px;
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .part-container {
+    padding: 15px;
+  }
+  
+  .content-wrapper {
+    padding: 20px;
+  }
+  
+  .page-title {
+    font-size: 1.8rem;
+  }
+  
+  .attribute-table th,
+  .attribute-table td {
+    padding: 8px 6px;
+    font-size: 0.8rem;
+  }
+  
+  .action-button {
+    width: 28px;
+    height: 28px;
   }
 }
 </style>
